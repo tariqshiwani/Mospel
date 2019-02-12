@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<package >
+  <metadata>
+    <id>MospelMQTT</id>
+    <version>0.2.2</version>
+    <title>Mospel MQTT Broker</title>
+    <authors>Tariq Shiwani</authors>
+    <owners>Tariq Shiwani</owners>
+	<license type="expression">Apache-2.0</license>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>Mospel MQTT library allows you to build your own MQTT server, giving you the ability to intercept authentication and authorization and much more stuff, currently it only works with WebSocket, later I will add support for TCP socket and TLS connection.</description>
+    <releaseNotes>fixed some bugs</releaseNotes>
+    <copyright>Copyright 2019</copyright>
+    <tags>MQTT Broker Mosquitto Mospel PubSub</tags>
+  </metadata>
+</package>
