@@ -15,6 +15,7 @@ Authentication and Authorization, I have added some interceptors in this library
 Limitations
 
 1). for now this broker works with websocket only, I will add regular TCP socket support to it.
+
 2). it doesn't work with TLS yet.
 
 
