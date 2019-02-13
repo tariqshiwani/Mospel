@@ -23,3 +23,6 @@ Authentication and Authorization, I have added some interceptors in this library
 
 [Fleck](https://www.nuget.org/packages/Fleck/) is a nuget packate that is being used to communicate over WebSocket
 
+**Compatibility**
+
+this broker is compatible with any WebSocket based MQTT client, I've tested with [Paho MQTT Client](https://www.eclipse.org/paho/clients/js/)
