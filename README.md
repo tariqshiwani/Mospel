@@ -21,5 +21,5 @@ Authentication and Authorization, I have added some interceptors in this library
 
 **Dependencies**
 
-Fleck is a nuget packate that is being used to communicate over WebSocket
+[Fleck](https://www.nuget.org/packages/Fleck/) is a nuget packate that is being used to communicate over WebSocket
 
