@@ -11,6 +11,7 @@ namespace Mospel.MqttBroker
         public Action<MqttSubscriptionInterceptor> SubscriptionInterceptor { get; set; }
         public Action<MqttPublishInterceptor> PublishInterceptor { get; set; }
         public Action<MqttConnectionInterceptor> ConnectionInterceptor { get; set; }
+        public Action<MqttDisconnectionInterceptor> DisconnectionInterceptor { get; set; }
 
     }
 }

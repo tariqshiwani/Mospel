@@ -47,8 +47,10 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="LogHelper.cs" />
     <Compile Include="MqttClientSession.cs" />
     <Compile Include="MqttConnectionInterceptor.cs" />
+    <Compile Include="MqttDisconnectionInterceptor.cs" />
     <Compile Include="MqttPublishInterceptor.cs" />
     <Compile Include="MqttPacketBodyReader.cs" />
     <Compile Include="MqttPackets\MqttBasePacket.cs" />

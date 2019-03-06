@@ -26,7 +26,7 @@ namespace Mospel.MqttBroker
 
         internal MqttPublishPacket WillMessage;
         internal bool CanDispose = false;
-        internal string ClientId { get; set; }
+        public string ClientId { get; set; }
 
         internal MqttClientSession(IWebSocketConnection socket, MqttConnectPacket packet)
         {
@@ -155,8 +155,15 @@ namespace Mospel.MqttBroker
                     }
                     lock (PublishQueue)
                     {
-                        packet.PacketIdentifier = GenerateIdentifier();
-                        PublishQueue.Add((ushort)packet.PacketIdentifier, packet);
+                        if (packet.QualityOfServiceLevel != MqttQualityOfServiceLevel.AtMostOnce)
+                        {
+                            packet.PacketIdentifier = GenerateIdentifier();
+                            PublishQueue.Add((ushort)packet.PacketIdentifier, packet);
+                        }
+                        else
+                        {
+                            packet.PacketIdentifier = 0;
+                        }
                     }
                 }
                 Send(packet);
@@ -193,28 +200,28 @@ namespace Mospel.MqttBroker
             return (socket == Socket);
         }
 
-        internal void SendPubRel(MqttPubRecPacket request)
+        internal void SendPubRel(ushort? identifier)
         {
             MqttPubRelPacket res = new MqttPubRelPacket();
-            res.PacketIdentifier = request.PacketIdentifier;
+            res.PacketIdentifier = identifier;
             lock (PublishQueue)
             {
-                PublishQueue[(ushort)request.PacketIdentifier] = res;
+                PublishQueue[(ushort)identifier] = res;
             }
             Send(res);
         }
 
-        internal void SendPubComp(MqttPubRelPacket request)
+        internal void SendPubComp(ushort? identifier)
         {
             MqttPubCompPacket res = new MqttPubCompPacket();
-            res.PacketIdentifier = request.PacketIdentifier;
+            res.PacketIdentifier = identifier;
             Send(res);
         }
 
-        internal void SendPubRec(MqttPublishPacket request)
+        internal void SendPubRec(ushort? identifier)
         {
             MqttPubRecPacket res = new MqttPubRecPacket();
-            res.PacketIdentifier = request.PacketIdentifier;
+            res.PacketIdentifier = identifier;
             Send(res);
         }
 

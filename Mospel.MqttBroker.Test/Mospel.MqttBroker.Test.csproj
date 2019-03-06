@@ -114,7 +114,7 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Mospel MQTT Broker Library\MospelMQTTBrokerLibrary.csproj">
+    <ProjectReference Include="..\Mospel.MqttBroker\Mospel.MqttBroker.csproj">
       <Project>{4442edfc-5ab0-4914-b99f-98c1ed65533c}</Project>
       <Name>MospelMQTTBrokerLibrary</Name>
     </ProjectReference>

@@ -3,3 +3,10 @@
 ################################################################################
 
 /packages/Fleck.1.0.3
+/Mospel.MqttBroker.Test/bin/Debug
+/Mospel.MqttBroker/bin
+/Mospel.MqttBroker/license
+/Mospel.MqttBroker/obj
+/Mospel.MqttBroker.Test/obj
+/Mospel.MqttBroker/nuget.exe
+/.vs/MospelMQTTBroker/v15

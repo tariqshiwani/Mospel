@@ -4,7 +4,9 @@ using Mospel.MqttSerializer;
 using Mospel.Protocol;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 
 namespace Mospel.MqttBroker
@@ -18,27 +20,45 @@ namespace Mospel.MqttBroker
         private Dictionary<string, MqttClientSession> allConnections = new Dictionary<string, MqttClientSession>();
         private Dictionary<string, MqttBasePacket> RetainMessages = new Dictionary<string, MqttBasePacket>();
         private WebSocketServer server;
+        private LogHelper errorLog;
+        private LogHelper activityLog;
+        private LogHelper webSocketLog;
 
         public MqttServerOptions ServerOptions { get; set; }
-        
+
         public MqttServer(string host, int port)
         {
             Host = host;
             Port = port;
-
+            errorLog = new LogHelper(Path.Combine(AppContext.BaseDirectory, "Logs", "Mospel", "Error"), "Errors.txt");
+            activityLog = new LogHelper(Path.Combine(AppContext.BaseDirectory, "Logs", "Mospel", "Activity"), "Activity.txt");
+            webSocketLog = new LogHelper(Path.Combine(AppContext.BaseDirectory, "Logs", "Mospel", "WebSocket"), "Log.txt");
         }
 
-        public void Start()
+        public void Start(X509Certificate2 cert = null)
         {
             FleckLog.Level = LogLevel.Error;
+
+            FleckLog.LogAction = (level, message, ex) => {
+                webSocketLog.Add(message + " " + (ex != null ? ex.Message : ""));
+            };
 
             isRunning = true;
             t = new Thread(Process);
             t.IsBackground = false;
             t.Start();
 
-            server = new WebSocketServer("ws://" + Host + ":" + Port.ToString());
-
+            activityLog.Add("Starting WebSocketServer");
+            if(cert != null)
+            {
+                server = new WebSocketServer("wss://" + Host + ":" + Port.ToString());
+                server.Certificate = cert;
+            }
+            else
+            {
+                server = new WebSocketServer("ws://" + Host + ":" + Port.ToString());
+            }
+            server.RestartAfterListenError = true;
             List<string> SupportedProtocols = new List<string>();
             SupportedProtocols.Add("mqtt");
             SupportedProtocols.Add("mqttv3.1");
@@ -48,15 +68,22 @@ namespace Mospel.MqttBroker
             {
                 socket.OnOpen = () =>
                 {
-
+                    activityLog.Add("New Connection request");
                 };
                 socket.OnClose = () =>
                 {
+                    activityLog.Add("Connection closed", socket.ConnectionInfo.ClientIpAddress);
                     MqttClientSession connection = Find(socket);
                     if (connection != null)
                     {
                         if (connection.WillMessage != null && isRunning == true)
+                        {
+                            activityLog.Add("Sending will message from ", "ClientId:" + connection.ClientId, connection.ClientInfo.ToString());
                             PublishToAll(connection.WillMessage);
+                        }
+
+                        var disConInterceptor = new MqttDisconnectionInterceptor(connection, connection.ClientInfo);
+                        ServerOptions.DisconnectionInterceptor?.Invoke(disConInterceptor);
                     }
                 };
                 //socket.OnMessage = message =>
@@ -109,6 +136,7 @@ namespace Mospel.MqttBroker
                     }
                 };
             });
+            activityLog.Add("Started");
         }
 
         private MqttClientSession Find(IWebSocketConnection socket)
@@ -136,28 +164,34 @@ namespace Mospel.MqttBroker
         {
             while (isRunning) // cleanup process for all the timed out and long disconnected connections
             {
-                for (int i = allConnections.Count - 1; i >= 0; i--)
+                try
                 {
-                    var cid = allConnections.Keys.ToArray()[i];
-                    if (allConnections[cid].TimedOut() && allConnections[cid].IsConnected) // if there is no activity since keep alive x 1.5
+                    for (int i = allConnections.Count - 1; i >= 0; i--)
                     {
-                        allConnections[cid].Close(); // disconnect
-                    }
-                    allConnections[cid].Cleanup(); // mark CanDispose if disconnected for long time (CleanupTime)
-                    if (allConnections[cid].CanDispose) // see if it can be disposed
-                    {
-                        allConnections[cid].Dispose(); // dispose and remove
-                        lock (allConnections)
+                        var cid = allConnections.Keys.ToArray()[i];
+                        if (allConnections[cid].TimedOut() && allConnections[cid].IsConnected) // if there is no activity since keep alive x 1.5
                         {
-                            allConnections.Remove(cid);
+                            allConnections[cid].Close(); // disconnect
+                        }
+                        allConnections[cid].Cleanup(); // mark CanDispose if disconnected for long time (CleanupTime)
+                        if (allConnections[cid].CanDispose) // see if it can be disposed
+                        {
+                            allConnections[cid].Dispose(); // dispose and remove
+                            lock (allConnections)
+                            {
+                                allConnections.Remove(cid);
+                            }
                         }
                     }
+                }catch(Exception ex)
+                {
+                    Error(ex.Message);
                 }
                 Thread.Sleep(1000);
             }
 
             // looks like service has stopped
-            foreach(MqttClientSession con in allConnections.Values) 
+            foreach (MqttClientSession con in allConnections.Values)
             {
                 con.Disconnect(); //disconnect all connections
                 con.Dispose();
@@ -168,6 +202,7 @@ namespace Mospel.MqttBroker
 
         private MqttClientSession HandleConnectPacket(MqttConnectPacket packet, IWebSocketConnection socket, MqttClientSession connection)
         {
+            activityLog.Add("Connect packet received from ", packet.ClientId);
             var conInterceptor = new MqttConnectionInterceptor(packet);
             ServerOptions.ConnectionInterceptor?.Invoke(conInterceptor);
             if (conInterceptor.ReturnCode == MqttConnectReturnCode.ConnectionAccepted) // if authenticated
@@ -192,7 +227,7 @@ namespace Mospel.MqttBroker
                         connection = new MqttClientSession(socket, packet);
                     }
                     else
-                    { 
+                    {
                         if (connection != null) // if connection already exist
                         {
                             // just update new socket to existing session
@@ -207,11 +242,21 @@ namespace Mospel.MqttBroker
                     connection.ClientInfo = conInterceptor.ClientInfo;
                     allConnections[packet.ClientId] = connection;
                 }
+                activityLog.Add("connection accepted", packet.ClientId, connection.ClientInfo.ToString());
+
             }
+            else
+            {
+                activityLog.Add("connection rejected", packet.ClientId, connection.ClientInfo.ToString());
+                connection = new MqttClientSession(socket, packet);
+            }
+            activityLog.Add("sending connack to", packet.ClientId, connection.ClientInfo.ToString());
             connection.SendConnAck(conInterceptor.ReturnCode);
             if (conInterceptor.ReturnCode == MqttConnectReturnCode.ConnectionAccepted)
             {
+                activityLog.Add("sending retain message to ", packet.ClientId, connection.ClientInfo.ToString());
                 SendRetainMessages(connection);
+                activityLog.Add("sending any pending queue", packet.ClientId, connection.ClientInfo.ToString());
                 connection.SendQueue();
             }
 
@@ -235,7 +280,7 @@ namespace Mospel.MqttBroker
             else
             {
                 MqttSubAckPacket sub = new MqttSubAckPacket();
-                foreach(TopicFilter tf in request.TopicFilters)
+                foreach (TopicFilter tf in request.TopicFilters)
                 {
                     sub.SubscribeReturnCodes.Add(MqttSubscribeReturnCode.Failure);
                 }
@@ -250,12 +295,12 @@ namespace Mospel.MqttBroker
 
         private void HandlePubRelPacket(MqttPubRelPacket request, MqttClientSession connection)
         {
-            connection.SendPubComp(request);
+            connection.SendPubComp(request.PacketIdentifier);
         }
 
         private void HandlePubRecPacket(MqttPubRecPacket request, MqttClientSession connection)
         {
-            connection.SendPubRel(request);
+            connection.SendPubRel(request.PacketIdentifier);
         }
 
         private void HandlePubAckPacket(MqttPubAckPacket request, MqttClientSession connection)
@@ -265,8 +310,11 @@ namespace Mospel.MqttBroker
 
         private void HandlePublishPacket(MqttPublishPacket request, MqttClientSession connection)
         {
+            activityLog.Add("Received publish packet id ", request.PacketIdentifier.ToString(), "from", connection.ClientId, connection.ClientInfo.ToString());
             var pubInterceptor = new MqttPublishInterceptor(connection.ClientInfo, request);
             ServerOptions.PublishInterceptor?.Invoke(pubInterceptor);
+            ushort? pId = request.PacketIdentifier;
+            pubInterceptor.Request.PacketIdentifier = pId;
             if (pubInterceptor.Allowed)
             {
                 if (request.Retain) // if retain is requested
@@ -275,7 +323,7 @@ namespace Mospel.MqttBroker
                     {
                         if (request.Payload.Length > 0) //if payload exists
                         {
-                            RetainMessages[request.Topic] = request; // update retain message
+                            RetainMessages[request.Topic] = pubInterceptor.Request; // update retain message, use intercepted request
                         }
                         else
                         {
@@ -283,20 +331,27 @@ namespace Mospel.MqttBroker
                         }
                     }
                 }
-                PublishToAll(request);
+                //pubInterceptor.Request.Retain = false;
+                PublishToAll(pubInterceptor.Request);
+            }
+            else
+            {
+                activityLog.Add("publish denied ",request.PacketIdentifier.ToString());
             }
             if (request.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtLeastOnce)
             {
-                connection.SendPubAck(request.PacketIdentifier);
+                connection.SendPubAck(pId);
             }
             if (request.QualityOfServiceLevel == MqttQualityOfServiceLevel.ExactlyOnce)
             {
-                connection.SendPubRec(request);
+                connection.SendPubRec(pId);
             }
         }
 
         private void PublishToAll(MqttPublishPacket request)
         {
+            activityLog.Add("Publishing packet ", request.PacketIdentifier.ToString());
+            request.Retain = false;
             lock (allConnections)
             {
                 foreach (MqttClientSession cs in allConnections.Values)
@@ -331,5 +386,16 @@ namespace Mospel.MqttBroker
                 }
             }
         }
+
+        private void Error(params object[] args)
+        {
+            errorLog.Add(args);
+        }
+        private void Log(params object[] args)
+        {
+            activityLog.Add(args);
+        }
     }
+
+   
 }
