@@ -11,3 +11,5 @@
 /Mospel.MqttBroker/nuget.exe
 /.vs/MospelMQTTBroker/v15
 /.vs
+*.nupkg
+/Mospel.MqttBroker/Mospel.MqttBroker.nuspec
