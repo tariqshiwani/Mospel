@@ -10,12 +10,12 @@ this broker was built with the intention to use with your other .net application
 **Features**
 
 Authentication and Authorization, I have added some interceptors in this library so whenver you have clients connecting to broker, you can validate the credentials from your database, on top of it also allows you to intercept the publish and subscribe requests so you can control who should be able to subscribe to specific topics and publish to them.
+Works with X509Certificate2
 
 
 **Limitations**
 
 1. for now this broker works with websocket only, I will add regular TCP socket support to it.
-2. it doesn't work with TLS yet.
 
 
 **Dependencies**
